@@ -33,6 +33,8 @@ func ParsePage(source io.Reader, pageURL string, fetchedAt time.Time) (*Page, er
 	page.Summary = firstParagraph(contentNode)
 	page.Facts = append(infoboxFacts(contentNode), itemStats(contentNode)...)
 	page.Abilities = abilities(contentNode)
+	page.Effects = itemEffects(contentNode)
+	page.Tags = heroTags(contentNode)
 	page.Catalog = catalogEntries(contentNode)
 	page.Sections = sections(contentNode)
 	page.LastModified = lastModified(document)
@@ -106,6 +108,46 @@ func itemStats(content *html.Node) []Fact {
 	return facts
 }
 
+func itemEffects(content *html.Node) []Effect {
+	itemInfobox := findFirst(content, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "item-infobox")
+	})
+	if itemInfobox == nil {
+		return nil
+	}
+
+	var effects []Effect
+	for _, kind := range []string{"passive", "active"} {
+		descriptionNode := findFirst(itemInfobox, func(node *html.Node) bool {
+			return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), kind+"-description")
+		})
+		if descriptionNode == nil {
+			continue
+		}
+		effect := Effect{Kind: strings.Title(kind), Description: clamp(cleanText(text(descriptionNode)), 700)}
+		for _, stat := range descendants(itemInfobox, func(node *html.Node) bool {
+			return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), kind+"-stat-container")
+		}) {
+			value := cleanText(text(stat))
+			if value != "" && !containsString(effect.Stats, value) {
+				effect.Stats = append(effect.Stats, clamp(value, 240))
+			}
+		}
+		effects = append(effects, effect)
+	}
+	return effects
+}
+
+func heroTags(content *html.Node) []string {
+	var tags []string
+	for _, tag := range descendants(content, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "infobox-h-herotag-pill")
+	}) {
+		tags = append(tags, cleanText(text(tag)))
+	}
+	return uniqueStrings(tags)
+}
+
 func containsFactValue(facts []Fact, value string) bool {
 	for _, fact := range facts {
 		if fact.Value == value {
@@ -135,7 +177,25 @@ func abilities(content *html.Node) []Ability {
 		if name == "" || body == "" {
 			continue
 		}
-		result = append(result, Ability{Name: name, Description: clamp(body, 700)})
+		ability := Ability{Name: name, Description: clamp(body, 700)}
+		for _, stat := range descendants(wrapper, func(node *html.Node) bool {
+			class := attribute(node, "class")
+			return node.Type == html.ElementNode && (strings.Contains(class, "ac-mainbox-inner") || strings.Contains(class, "ability-altbox"))
+		}) {
+			value := cleanText(text(stat))
+			if value != "" && !containsString(ability.Stats, value) {
+				ability.Stats = append(ability.Stats, clamp(value, 240))
+			}
+		}
+		for _, upgrade := range descendants(wrapper, func(node *html.Node) bool {
+			return node.Type == html.ElementNode && hasClass(node, "ability-upgrade")
+		}) {
+			value := cleanText(text(upgrade))
+			if value != "" && !containsString(ability.Upgrades, value) {
+				ability.Upgrades = append(ability.Upgrades, clamp(value, 320))
+			}
+		}
+		result = append(result, ability)
 	}
 	return result
 }
@@ -181,12 +241,34 @@ func descendants(node *html.Node, predicate func(*html.Node) bool) []*html.Node 
 
 func firstParagraph(content *html.Node) string {
 	paragraph := findFirst(content, func(node *html.Node) bool {
-		return node.Type == html.ElementNode && node.Data == "p" && len(cleanText(text(node))) > 40
+		return node.Type == html.ElementNode && node.Data == "p" && len(cleanText(text(node))) > 40 && !hasContentAncestor(node)
 	})
 	if paragraph == nil {
 		return ""
 	}
 	return clamp(cleanText(text(paragraph)), 900)
+}
+
+func hasContentAncestor(node *html.Node) bool {
+	for parent := node.Parent; parent != nil; parent = parent.Parent {
+		if parent.Type != html.ElementNode {
+			continue
+		}
+		class := attribute(parent, "class")
+		if parent.Data == "table" || strings.Contains(class, "infobox") || strings.Contains(class, "ability-") || strings.Contains(class, "hero-tabs") {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, value string) bool {
+	for _, existing := range values {
+		if existing == value {
+			return true
+		}
+	}
+	return false
 }
 
 func infoboxFacts(content *html.Node) []Fact {
@@ -299,6 +381,15 @@ func attribute(node *html.Node, name string) string {
 		}
 	}
 	return ""
+}
+
+func hasClass(node *html.Node, target string) bool {
+	for _, class := range strings.Fields(attribute(node, "class")) {
+		if class == target {
+			return true
+		}
+	}
+	return false
 }
 
 func text(node *html.Node) string {

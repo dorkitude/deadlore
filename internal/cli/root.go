@@ -222,7 +222,7 @@ func lookupAbility(ctx context.Context, command *cobra.Command, options *options
 			return err
 		}
 	} else {
-		writeBox(command.OutOrStdout(), ability.Name+" · Ability", []string{ability.Description})
+		writeBox(command.OutOrStdout(), ability.Name+" · Ability", abilityLines(ability, false))
 		fmt.Fprintln(command.OutOrStdout())
 		writeSource(command, page, cached)
 	}
@@ -341,6 +341,9 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 	if page.Summary != "" {
 		overview = append(overview, page.Summary)
 	}
+	if len(page.Tags) > 0 {
+		overview = append(overview, "Tags: "+strings.Join(page.Tags, " · "))
+	}
 	if len(overview) > 0 {
 		writeBox(output, page.Title+" · Deadlock Wiki", overview)
 	}
@@ -360,13 +363,30 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 	}
 	if len(page.Abilities) > 0 {
 		fmt.Fprintln(output)
-		abilities := make([]string, 0, len(page.Abilities)*2)
+		abilities := make([]string, 0, len(page.Abilities)*5)
 		for index, ability := range page.Abilities {
-			abilities = append(abilities, fmt.Sprintf("%d. %s", index+1, ability.Name), ability.Description, "")
+			abilities = append(abilities, abilityLines(ability, true)...)
+			if index < len(page.Abilities)-1 {
+				abilities = append(abilities, "")
+			}
 		}
 		writeBox(output, "Abilities", abilities)
 	}
+	for _, effect := range page.Effects {
+		fmt.Fprintln(output)
+		lines := make([]string, 0, len(effect.Stats)+1)
+		if effect.Description != "" {
+			lines = append(lines, effect.Description)
+		}
+		if len(effect.Stats) > 0 {
+			lines = append(lines, "Effect stats: "+strings.Join(effect.Stats, " · "))
+		}
+		writeBox(output, effect.Kind, lines)
+	}
 	for _, section := range page.Sections {
+		if len(page.Abilities) > 0 && strings.EqualFold(section.Title, "Abilities") {
+			continue
+		}
 		if len(section.Text) == 0 {
 			continue
 		}
@@ -375,6 +395,26 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 	}
 	fmt.Fprintln(output)
 	writeSource(command, page, cached)
+}
+
+func abilityLines(ability wiki.Ability, includeName bool) []string {
+	lines := make([]string, 0, len(ability.Upgrades)+3)
+	if includeName {
+		lines = append(lines, ability.Name)
+	}
+	if ability.Description != "" {
+		lines = append(lines, ability.Description)
+	}
+	if len(ability.Stats) > 0 {
+		lines = append(lines, "Stats: "+strings.Join(ability.Stats, " · "))
+	}
+	if len(ability.Upgrades) > 0 {
+		lines = append(lines, "Upgrades:")
+		for _, upgrade := range ability.Upgrades {
+			lines = append(lines, "• "+upgrade)
+		}
+	}
+	return lines
 }
 
 func writeSource(command *cobra.Command, page *wiki.Page, cached bool) {

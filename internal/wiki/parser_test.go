@@ -11,9 +11,10 @@ func TestParsePage(t *testing.T) {
 <h1 id="firstHeading">Heroic Aura<a class="feedback-button">Give feedback</a></h1>
 <div id="mw-content-text"><div class="mw-parser-output">
 <table class="infobox"><tr><th>Tier</th><td>3</td></tr><tr><th>Cost</th><td>3,200</td></tr></table>
-<div class="item-infobox"><div class="infobox-stat">+25% Spirit Lifesteal</div><div class="infobox-stat">+180 Bonus Health</div></div>
+<div class="item-infobox"><div class="infobox-stat">+25% Spirit Lifesteal</div><div class="infobox-stat">+180 Bonus Health</div><div class="passive-description">Heal when you damage a hero.</div><div class="passive-stat-container">+10% Lifesteal</div></div>
 <p>Heroic Aura is a Tier 3 Weapon Item that grants nearby allies useful combat stats.</p>
-<div class="ability-section-wrapper"><h3 class="ability-name">Aura Burst</h3><div class="ac-info-desc">Burst nearby enemies with a wave of spirit damage.</div></div>
+<span class="infobox-h-herotag-pill">Assassin</span>
+<div class="ability-section-wrapper"><h3 class="ability-name">Aura Burst</h3><div class="ac-info-desc">Burst nearby enemies with a wave of spirit damage.</div><div class="ac-mainbox-inner">65 Damage</div><button class="ability-upgrade">1 +10 Damage</button></div>
 <h2>Overview</h2><p>It improves a team fight when nearby allies can benefit from its aura.</p>
 <h2>Update history</h2><p>The item has changed several times across patches.</p>
 </div></div>
@@ -45,5 +46,14 @@ func TestParsePage(t *testing.T) {
 	}
 	if len(page.Abilities) != 1 || page.Abilities[0].Name != "Aura Burst" {
 		t.Fatalf("abilities = %#v", page.Abilities)
+	}
+	if len(page.Abilities[0].Stats) != 1 || len(page.Abilities[0].Upgrades) != 1 {
+		t.Fatalf("ability details = %#v", page.Abilities[0])
+	}
+	if len(page.Effects) != 1 || page.Effects[0].Kind != "Passive" || len(page.Effects[0].Stats) != 1 {
+		t.Fatalf("effects = %#v", page.Effects)
+	}
+	if len(page.Tags) != 1 || page.Tags[0] != "Assassin" {
+		t.Fatalf("tags = %#v", page.Tags)
 	}
 }

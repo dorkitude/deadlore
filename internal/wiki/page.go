@@ -12,6 +12,8 @@ type Page struct {
 	Summary      string    `json:"summary,omitempty"`
 	Facts        []Fact    `json:"facts,omitempty"`
 	Abilities    []Ability `json:"abilities,omitempty"`
+	Effects      []Effect  `json:"effects,omitempty"`
+	Tags         []string  `json:"tags,omitempty"`
 	Catalog      []string  `json:"catalog,omitempty"`
 	Sections     []Section `json:"sections,omitempty"`
 }
@@ -22,8 +24,16 @@ type Fact struct {
 }
 
 type Ability struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Stats       []string `json:"stats,omitempty"`
+	Upgrades    []string `json:"upgrades,omitempty"`
+}
+
+type Effect struct {
+	Kind        string   `json:"kind"`
+	Description string   `json:"description,omitempty"`
+	Stats       []string `json:"stats,omitempty"`
 }
 
 type Section struct {
