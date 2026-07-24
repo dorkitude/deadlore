@@ -59,6 +59,11 @@ deadlore item list
 deadlore ability list
 deadlore mechanic "Soul sharing"
 deadlore source Infuser
+deadlore timers cheatsheet
+deadlore cheat
+deadlore timers camps
+deadlore timers pickups
+deadlore timers objectives
 deadlore --json item "Heroic Aura"
 deadlore --no-color Haze
 deadlore --refresh Haze
@@ -68,6 +73,10 @@ deadlore cache clear --all
 ```
 
 Each response reports the canonical URL, wiki revision when available, wiki last-modified text, and local retrieval time. Cached data is refreshed after six hours by default; use `--refresh` to fetch it now.
+
+## Timers
+
+`deadlore timers cheatsheet` (or simply `deadlore cheat`) is a built-in, offline reference for the map's spawn and respawn timers. It covers jungle camps, Sinner's Sacrifice, breakables, power-ups, Mid-Boss, the Soul Urn, and the Unstable Rift. Use `camps`, `pickups`, or `objectives` to narrow the output. The reference identifies approximate or variable timers with `~` and reports the patch date through which it was checked; it never fetches the wiki.
 
 Interactive terminals get a compact, in-game-inspired stat HUD with ANSI color on modern Windows, macOS, and Linux. Color turns off automatically for redirected output, `NO_COLOR`, `TERM=dumb`, `--no-color`, and `--json`.
 

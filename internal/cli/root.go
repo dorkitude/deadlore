@@ -62,6 +62,8 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newAbilityCommand(options))
 	root.AddCommand(newSourceCommand(options))
 	root.AddCommand(newCacheCommand(options))
+	root.AddCommand(newTimersCommand(options))
+	root.AddCommand(newCheatCommand(options))
 	return root
 }
 
