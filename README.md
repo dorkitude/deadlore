@@ -52,7 +52,11 @@ go run ./cmd/deadlore Haze
 ```bash
 deadlore Haze
 deadlore hero Haze
+deadlore ability "Sleep Dagger"
 deadlore item "Heroic Aura"
+deadlore hero list
+deadlore item list
+deadlore ability list
 deadlore mechanic "Soul sharing"
 deadlore source Infuser
 deadlore --json item "Heroic Aura"

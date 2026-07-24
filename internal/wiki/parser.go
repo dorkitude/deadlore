@@ -30,11 +30,113 @@ func ParsePage(source io.Reader, pageURL string, fetchedAt time.Time) (*Page, er
 		FetchedAt: fetchedAt,
 	}
 	page.Summary = firstParagraph(contentNode)
-	page.Facts = infoboxFacts(contentNode)
+	page.Facts = append(infoboxFacts(contentNode), itemStats(contentNode)...)
+	page.Abilities = abilities(contentNode)
+	page.Catalog = catalogEntries(contentNode)
 	page.Sections = sections(contentNode)
 	page.LastModified = lastModified(document)
 	page.RevisionID = revisionID(document)
 	return page, nil
+}
+
+func catalogEntries(content *html.Node) []string {
+	var entries []string
+	for _, hero := range descendants(content, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "HeroName")
+	}) {
+		entries = append(entries, cleanText(text(hero)))
+	}
+	if len(entries) > 0 {
+		return uniqueStrings(entries)
+	}
+
+	categoryPages := findByID(content, "mw-pages")
+	if categoryPages == nil {
+		return nil
+	}
+	for _, link := range descendants(categoryPages, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && node.Data == "a"
+	}) {
+		title := strings.TrimSpace(attribute(link, "title"))
+		href := attribute(link, "href")
+		if title == "" || !strings.HasPrefix(href, "/") || strings.Contains(title, ":") || strings.Contains(title, "/") {
+			continue
+		}
+		entries = append(entries, title)
+	}
+	return uniqueStrings(entries)
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func itemStats(content *html.Node) []Fact {
+	itemInfobox := findFirst(content, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "item-infobox")
+	})
+	if itemInfobox == nil {
+		return nil
+	}
+
+	var facts []Fact
+	for _, stat := range descendants(itemInfobox, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "infobox-stat")
+	}) {
+		value := cleanText(text(stat))
+		if value == "" || containsFactValue(facts, value) {
+			continue
+		}
+		facts = append(facts, Fact{Value: clamp(value, 240)})
+	}
+	return facts
+}
+
+func containsFactValue(facts []Fact, value string) bool {
+	for _, fact := range facts {
+		if fact.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
+func abilities(content *html.Node) []Ability {
+	var result []Ability
+	for _, wrapper := range descendants(content, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "ability-section-wrapper")
+	}) {
+		heading := findFirst(wrapper, func(node *html.Node) bool {
+			return node.Type == html.ElementNode && node.Data == "h3" && strings.Contains(attribute(node, "class"), "ability-name")
+		})
+		description := findFirst(wrapper, func(node *html.Node) bool {
+			return node.Type == html.ElementNode && strings.Contains(attribute(node, "class"), "ac-info-desc")
+		})
+		if heading == nil || description == nil {
+			continue
+		}
+
+		name := cleanText(text(heading))
+		body := cleanText(text(description))
+		if name == "" || body == "" {
+			continue
+		}
+		result = append(result, Ability{Name: name, Description: clamp(body, 700)})
+	}
+	return result
 }
 
 func findByID(node *html.Node, id string) *html.Node {
@@ -137,7 +239,13 @@ func sections(content *html.Node) []Section {
 	var result []Section
 	var current *Section
 	for _, node := range descendants(content, func(node *html.Node) bool {
-		return node.Type == html.ElementNode && (node.Data == "h2" || node.Data == "h3" || node.Data == "p")
+		if node.Type != html.ElementNode {
+			return false
+		}
+		if node.Data == "p" || node.Data == "h2" {
+			return true
+		}
+		return node.Data == "h3" && !strings.Contains(attribute(node, "class"), "ability-name")
 	}) {
 		switch node.Data {
 		case "h2", "h3":
