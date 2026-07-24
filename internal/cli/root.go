@@ -16,6 +16,7 @@ import (
 
 type options struct {
 	json     bool
+	noColor  bool
 	refresh  bool
 	cacheDir string
 	wikiURL  string
@@ -38,6 +39,9 @@ func newRootCommand() *cobra.Command {
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRun: func(_ *cobra.Command, _ []string) {
+			configureColor(options.noColor || options.json)
+		},
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return command.Help()
@@ -47,6 +51,7 @@ func newRootCommand() *cobra.Command {
 	}
 
 	root.PersistentFlags().BoolVar(&options.json, "json", false, "print structured JSON")
+	root.PersistentFlags().BoolVar(&options.noColor, "no-color", false, "disable ANSI color output")
 	root.PersistentFlags().BoolVar(&options.refresh, "refresh", false, "bypass the local cache")
 	root.PersistentFlags().StringVar(&options.cacheDir, "cache-dir", "", "cache directory (default: system user cache)")
 	root.PersistentFlags().StringVar(&options.wikiURL, "wiki-url", wiki.DefaultBaseURL, "Deadlock Wiki base URL")
@@ -232,6 +237,10 @@ func lookupAbility(ctx context.Context, command *cobra.Command, options *options
 			return err
 		}
 	} else {
+		if tiles := abilityStatTiles(ability); len(tiles) > 0 {
+			writeStatTiles(command.OutOrStdout(), ability.Name+" · Key stats", tiles)
+			fmt.Fprintln(command.OutOrStdout())
+		}
 		writeBox(command.OutOrStdout(), ability.Name+" · Ability", abilityLines(ability, false))
 		fmt.Fprintln(command.OutOrStdout())
 		writeSource(command, page, cached)
@@ -357,6 +366,10 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 	if len(overview) > 0 {
 		writeBox(output, page.Title+" · Deadlock Wiki", overview)
 	}
+	if tiles := pageStatTiles(page); len(tiles) > 0 {
+		fmt.Fprintln(output)
+		writeStatTiles(output, "Key stats", tiles)
+	}
 	if len(page.Facts) > 0 {
 		fmt.Fprintln(output)
 		facts := make([]string, 0, len(page.Facts))
@@ -405,6 +418,80 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 	}
 	fmt.Fprintln(output)
 	writeSource(command, page, cached)
+}
+
+func pageStatTiles(page *wiki.Page) []statTile {
+	if len(page.Facts) == 0 {
+		return nil
+	}
+
+	preferred := []string{
+		"Damage Per Second", "Bullet Damage", "Health", "Ammo", "Move Speed", "Reload Time",
+	}
+	byLabel := make(map[string]string, len(page.Facts))
+	for _, fact := range page.Facts {
+		label := strings.TrimSpace(strings.TrimSuffix(fact.Label, ":"))
+		if label != "" {
+			byLabel[strings.ToLower(label)] = strings.TrimSpace(fact.Value)
+		}
+	}
+
+	tiles := make([]statTile, 0, 6)
+	for _, label := range preferred {
+		if value := byLabel[strings.ToLower(label)]; value != "" {
+			tiles = append(tiles, statTile{Label: label, Value: value})
+		}
+	}
+	if len(tiles) > 0 {
+		return tiles
+	}
+
+	for _, fact := range page.Facts {
+		if len(tiles) == 6 {
+			break
+		}
+		if label := strings.TrimSpace(strings.TrimSuffix(fact.Label, ":")); label != "" {
+			tiles = append(tiles, statTile{Label: label, Value: strings.TrimSpace(fact.Value)})
+			continue
+		}
+		if tile, ok := tileFromStat(strings.TrimSpace(fact.Value)); ok {
+			tiles = append(tiles, tile)
+		}
+	}
+	return tiles
+}
+
+func abilityStatTiles(ability wiki.Ability) []statTile {
+	tiles := make([]statTile, 0, 6)
+	for _, stat := range ability.Stats {
+		if len(tiles) == 6 {
+			break
+		}
+		if tile, ok := tileFromStat(stat); ok {
+			tiles = append(tiles, tile)
+		}
+	}
+	return tiles
+}
+
+func tileFromStat(stat string) (statTile, bool) {
+	parts := strings.Fields(stat)
+	if len(parts) < 2 {
+		return statTile{}, false
+	}
+	valueLength := 1
+	if len(parts) > 2 && isStatUnit(parts[1]) {
+		valueLength = 2
+	}
+	label := strings.Join(parts[valueLength:], " ")
+	if label == "" {
+		return statTile{}, false
+	}
+	return statTile{Label: label, Value: strings.Join(parts[:valueLength], " ")}, true
+}
+
+func isStatUnit(value string) bool {
+	return value == "%" || value == "s" || value == "m" || value == "m/s"
 }
 
 func abilityLines(ability wiki.Ability, includeName bool) []string {

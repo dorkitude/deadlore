@@ -21,7 +21,7 @@
   ./deadlore --cache-dir /tmp/deadlore-smoke --json ability list
   ```
 
-The root `deadlore` binary is ignored by Git. `--json` is a public machine-facing interface; keep it structured and free of terminal formatting.
+The root `deadlore` binary is ignored by Git. `--json` is a public machine-facing interface; keep it structured and free of terminal formatting. Human output may use ANSI color in interactive terminals, but must remain readable without it: honor `NO_COLOR`, `TERM=dumb`, `--no-color`, redirected output, and `--json`.
 
 When changing parsed `wiki.Page` output, bump `wiki.CurrentCacheVersion` so older cached pages cannot hide newly supported fields from users.
 

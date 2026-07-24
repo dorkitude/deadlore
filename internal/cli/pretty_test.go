@@ -20,3 +20,32 @@ func TestWriteBoxWrapsLongText(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteStatTilesFitTheCard(t *testing.T) {
+	var output bytes.Buffer
+	writeStatTiles(&output, "Key stats", []statTile{
+		{Label: "Damage per second", Value: "50.1"},
+		{Label: "Health", Value: "730 +33"},
+		{Label: "Move speed", Value: "8.2m/s"},
+	})
+
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		if len([]rune(line)) != boxWidth {
+			t.Fatalf("line has width %d, expected %d: %q", len([]rune(line)), boxWidth, line)
+		}
+	}
+}
+
+func TestPaintUsesColorOnlyWhenEnabled(t *testing.T) {
+	original := colorEnabled
+	t.Cleanup(func() { colorEnabled = original })
+
+	colorEnabled = false
+	if got := paint("Deadlore", ansiCyan); got != "Deadlore" {
+		t.Fatalf("disabled color = %q", got)
+	}
+	colorEnabled = true
+	if got := paint("Deadlore", ansiCyan); got != ansiCyan+"Deadlore"+ansiReset {
+		t.Fatalf("enabled color = %q", got)
+	}
+}
