@@ -1,7 +1,7 @@
 # deadlore
 
-`deadlore` is a source-aware CLI for the community-maintained [Deadlock Wiki](https://deadlock.wiki).
-It performs one-page, canonical article lookups and keeps a small local cache; it does not bulk crawl the wiki or call its crawler-disallowed API endpoints.
+`deadlore` is a source-aware CLI for the community-maintained [Deadlock Wiki](https://deadlock.wiki) and [Deadlock.io](https://deadlock.io).
+For each lookup it fetches the matching page from both sources independently, stores them in separate local caches, and reports structured differences where the same stat is available from both. It fetches canonical Wiki pages only and does not call its crawler-disallowed API endpoints; Deadlock.io is read through its public JSON source.
 
 ## Install
 
@@ -79,6 +79,10 @@ deadlore cache clear --all
 ```
 
 Each response reports the canonical URL, wiki revision when available, wiki last-modified text, and local retrieval time. Cached data is refreshed after six hours by default; use `--refresh` to fetch it now.
+
+## Sources
+
+`hero`, `item`, `mechanic`, free-form lookups, abilities, hero analysis, and lists compare both sources. Human output presents each source followed by a comparison card; `--json` keeps the existing Wiki fields and adds a `deadlock_io` object with its page, source metadata, and comparable results. `cache status` reports the two caches separately, while `cache clear` clears the matching entry from both. Use `--wiki-url` or `--deadlockio-url` only when testing an alternate source endpoint.
 
 ## Timers
 

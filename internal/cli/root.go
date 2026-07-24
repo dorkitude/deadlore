@@ -10,16 +10,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dorkitude/deadlore/internal/deadlockio"
 	"github.com/dorkitude/deadlore/internal/wiki"
 	"github.com/spf13/cobra"
 )
 
 type options struct {
-	json     bool
-	noColor  bool
-	refresh  bool
-	cacheDir string
-	wikiURL  string
+	json          bool
+	noColor       bool
+	refresh       bool
+	cacheDir      string
+	wikiURL       string
+	deadlockIOURL string
 }
 
 func Execute() {
@@ -55,6 +57,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().BoolVar(&options.refresh, "refresh", false, "bypass the local cache")
 	root.PersistentFlags().StringVar(&options.cacheDir, "cache-dir", "", "cache directory (default: system user cache)")
 	root.PersistentFlags().StringVar(&options.wikiURL, "wiki-url", wiki.DefaultBaseURL, "Deadlock Wiki base URL")
+	root.PersistentFlags().StringVar(&options.deadlockIOURL, "deadlockio-url", deadlockio.DefaultBaseURL, "Deadlock.io API base URL")
 
 	root.AddCommand(newHeroCommand(options))
 	root.AddCommand(newLookupCommand("item", "Look up an item", options))
@@ -112,17 +115,35 @@ func newSourceCommand(options *options) *cobra.Command {
 				return err
 			}
 			page, cached, err := client.Get(command.Context(), strings.Join(args, " "), options.refresh)
-			if page == nil {
+			ioClient, clientErr := deadlockIOClientFor(options)
+			if clientErr != nil {
+				return clientErr
+			}
+			ioPage, ioCached, ioErr := ioClient.Get(command.Context(), strings.Join(args, " "), "", options.refresh)
+			if page == nil && ioPage == nil {
 				return err
 			}
 			if options.json {
-				if writeErr := writeJSON(command, map[string]any{"source": sourceFor(page, cached)}); writeErr != nil {
+				result := map[string]any{"source": sourceFor(page, cached), "deadlock_io": sourceFor(ioPage, ioCached)}
+				if writeErr := writeJSON(command, result); writeErr != nil {
 					return writeErr
 				}
 			} else {
-				writeSource(command, page, cached)
+				if page != nil {
+					writeSource(command, page, cached)
+				}
+				if ioPage != nil {
+					writeSource(command, ioPage, ioCached)
+				}
+				writeSourceAvailability(command.OutOrStdout(), page != nil, ioPage != nil, ioErr)
 			}
-			return warning(command, err)
+			if err != nil && page != nil {
+				warning(command, err)
+			}
+			if ioErr != nil && ioPage != nil {
+				warning(command, ioErr)
+			}
+			return nil
 		},
 	}
 }
@@ -142,12 +163,24 @@ func newCacheCommand(options *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if options.json {
-				return writeJSON(command, map[string]any{"entries": count, "newest": newest})
+			ioClient, err := deadlockIOClientFor(options)
+			if err != nil {
+				return err
 			}
-			fmt.Fprintf(command.OutOrStdout(), "Entries: %d\n", count)
+			ioCount, ioNewest, err := ioClient.CacheStatus()
+			if err != nil {
+				return err
+			}
+			if options.json {
+				return writeJSON(command, map[string]any{"entries": count, "newest": newest, "deadlock_io": map[string]any{"entries": ioCount, "newest": ioNewest}})
+			}
+			fmt.Fprintf(command.OutOrStdout(), "Deadlock Wiki entries: %d\n", count)
 			if !newest.IsZero() {
-				fmt.Fprintf(command.OutOrStdout(), "Newest:  %s\n", newest.Format(time.RFC3339))
+				fmt.Fprintf(command.OutOrStdout(), "Deadlock Wiki newest:  %s\n", newest.Format(time.RFC3339))
+			}
+			fmt.Fprintf(command.OutOrStdout(), "Deadlock.io entries: %d\n", ioCount)
+			if !ioNewest.IsZero() {
+				fmt.Fprintf(command.OutOrStdout(), "Deadlock.io newest:  %s\n", ioNewest.Format(time.RFC3339))
 			}
 			return nil
 		},
@@ -177,6 +210,13 @@ func newCacheCommand(options *options) *cobra.Command {
 			if err := client.Cache().Clear(title); err != nil {
 				return err
 			}
+			ioClient, err := deadlockIOClientFor(options)
+			if err != nil {
+				return err
+			}
+			if err := ioClient.ClearCache(title); err != nil {
+				return err
+			}
 			if all {
 				fmt.Fprintln(command.OutOrStdout(), "Cleared all cached pages.")
 			} else {
@@ -197,17 +237,35 @@ func lookup(ctx context.Context, command *cobra.Command, options *options, title
 		return err
 	}
 	page, cached, lookupError := client.Get(ctx, title, options.refresh)
-	if page == nil {
+	ioClient, err := deadlockIOClientFor(options)
+	if err != nil {
+		return err
+	}
+	ioPage, ioCached, ioError := ioClient.Get(ctx, title, deadlockIOKind(command.Name()), options.refresh)
+	if page == nil && ioPage == nil {
 		return lookupError
 	}
 	if options.json {
-		if err := writeJSON(command, map[string]any{"page": page, "cached": cached}); err != nil {
+		if err := writeJSON(command, map[string]any{"page": page, "cached": cached, "deadlock_io": map[string]any{"page": ioPage, "cached": ioCached}}); err != nil {
 			return err
 		}
 	} else {
-		writePage(command, page, cached)
+		if page != nil {
+			writePage(command, page, cached)
+		}
+		if ioPage != nil {
+			fmt.Fprintln(command.OutOrStdout())
+			writeDeadlockIOPage(command, ioPage, ioCached)
+		}
+		writeSourceComparison(command.OutOrStdout(), page, ioPage)
 	}
-	return warning(command, lookupError)
+	if lookupError != nil && page != nil {
+		warning(command, lookupError)
+	}
+	if ioError != nil && ioPage != nil {
+		warning(command, ioError)
+	}
+	return nil
 }
 
 func lookupAbility(ctx context.Context, command *cobra.Command, options *options, name string) error {
@@ -216,38 +274,56 @@ func lookupAbility(ctx context.Context, command *cobra.Command, options *options
 		return err
 	}
 	page, cached, lookupError := client.Get(ctx, name, options.refresh)
-	if page == nil {
+	ioClient, err := deadlockIOClientFor(options)
+	if err != nil {
+		return err
+	}
+	ioPage, ioAbility, ioFound, ioCached, ioError := ioClient.GetAbility(ctx, name, options.refresh)
+	if page == nil && !ioFound {
 		return lookupError
 	}
-
-	ability, found := findAbility(page.Abilities, name)
-	if !found {
-		notice := fmt.Sprintf("%q is not a hero ability; showing the resolved %s page instead.", name, page.Title)
-		if options.json {
-			if err := writeJSON(command, map[string]any{"notice": notice, "page": page, "cached": cached}); err != nil {
-				return err
-			}
-		} else {
-			fmt.Fprintln(command.OutOrStdout(), "Note:", notice)
-			fmt.Fprintln(command.OutOrStdout())
-			writePage(command, page, cached)
-		}
-		return warning(command, lookupError)
+	ability, found := wiki.Ability{}, false
+	if page != nil {
+		ability, found = findAbility(page.Abilities, name)
 	}
 	if options.json {
-		if err := writeJSON(command, map[string]any{"ability": ability, "page": page, "cached": cached}); err != nil {
+		result := map[string]any{"page": page, "cached": cached, "deadlock_io": map[string]any{"ability": ioAbility, "page": ioPage, "cached": ioCached, "found": ioFound}}
+		if found {
+			result["ability"] = ability
+		} else if page != nil {
+			result["notice"] = fmt.Sprintf("%q is not a hero ability; showing the resolved %s page instead.", name, page.Title)
+		}
+		if err := writeJSON(command, result); err != nil {
 			return err
 		}
 	} else {
-		if tiles := abilityStatTiles(ability); len(tiles) > 0 {
-			writeStatTiles(command.OutOrStdout(), ability.Name+" · Key stats", tiles)
+		if page != nil && found {
+			if tiles := abilityStatTiles(ability); len(tiles) > 0 {
+				writeStatTiles(command.OutOrStdout(), ability.Name+" · Key stats", tiles)
+				fmt.Fprintln(command.OutOrStdout())
+			}
+			writeBox(command.OutOrStdout(), ability.Name+" · Ability", abilityLines(ability, false))
 			fmt.Fprintln(command.OutOrStdout())
+			writeSource(command, page, cached)
+		} else if page != nil {
+			fmt.Fprintf(command.OutOrStdout(), "Note: %q is not a hero ability; showing the resolved %s page instead.\n\n", name, page.Title)
+			writePage(command, page, cached)
 		}
-		writeBox(command.OutOrStdout(), ability.Name+" · Ability", abilityLines(ability, false))
-		fmt.Fprintln(command.OutOrStdout())
-		writeSource(command, page, cached)
+		if ioFound {
+			fmt.Fprintln(command.OutOrStdout())
+			writeBox(command.OutOrStdout(), ioAbility.Name+" · Deadlock.io ability", abilityLines(ioAbility, false))
+			fmt.Fprintln(command.OutOrStdout())
+			writeSource(command, ioPage, ioCached)
+		}
+		writeAbilityComparison(command.OutOrStdout(), ability, found, ioAbility, ioFound)
 	}
-	return warning(command, lookupError)
+	if lookupError != nil && page != nil {
+		warning(command, lookupError)
+	}
+	if ioError != nil && ioFound {
+		warning(command, ioError)
+	}
+	return nil
 }
 
 func listEntities(ctx context.Context, command *cobra.Command, options *options, kind string) error {
@@ -257,23 +333,64 @@ func listEntities(ctx context.Context, command *cobra.Command, options *options,
 		return err
 	}
 	page, cached, lookupError := client.Get(ctx, title, options.refresh)
-	if page == nil {
+	ioClient, err := deadlockIOClientFor(options)
+	if err != nil {
+		return err
+	}
+	ioCatalog, ioCached, ioError := ioClient.Catalog(ctx, kind, options.refresh)
+	if page == nil && ioCatalog == nil {
 		return lookupError
 	}
-	if len(page.Catalog) == 0 {
+	if page != nil && len(page.Catalog) == 0 {
 		return fmt.Errorf("the wiki did not provide a %s catalog", kind)
 	}
+	ioEntries := deadlockIOCatalogEntries(ioCatalog)
 	if options.json {
-		if err := writeJSON(command, map[string]any{"type": kind, "entries": page.Catalog, "page": page, "cached": cached}); err != nil {
+		if err := writeJSON(command, map[string]any{"type": kind, "entries": catalogEntries(page), "page": page, "cached": cached, "deadlock_io": map[string]any{"entries": ioEntries, "page": ioCatalog, "cached": ioCached}}); err != nil {
 			return err
 		}
 	} else {
 		displayName := map[string]string{"hero": "Heroes", "item": "Items"}[kind]
-		writeList(command.OutOrStdout(), displayName, page.Catalog)
+		if page != nil {
+			writeList(command.OutOrStdout(), displayName, page.Catalog)
+		}
 		fmt.Fprintln(command.OutOrStdout())
-		writeSource(command, page, cached)
+		if page != nil {
+			writeSource(command, page, cached)
+		}
+		writeCatalogComparison(command.OutOrStdout(), displayName, catalogEntries(page), ioEntries)
+		if ioCatalog != nil {
+			writeSource(command, ioCatalog, ioCached)
+		}
 	}
-	return warning(command, lookupError)
+	if lookupError != nil && page != nil {
+		warning(command, lookupError)
+	}
+	if ioError != nil && ioCatalog != nil {
+		warning(command, ioError)
+	}
+	return nil
+}
+
+func catalogEntries(page *wiki.Page) []string {
+	if page == nil {
+		return nil
+	}
+	return page.Catalog
+}
+
+func deadlockIOCatalogEntries(page *wiki.Page) []string {
+	if page == nil {
+		return nil
+	}
+	entries := make([]string, 0, len(page.Catalog))
+	for _, entry := range page.Catalog {
+		name, _, found := strings.Cut(entry, "\t")
+		if found {
+			entries = append(entries, name)
+		}
+	}
+	return entries
 }
 
 func listAbilities(ctx context.Context, command *cobra.Command, options *options) error {
@@ -305,14 +422,26 @@ func listAbilities(ctx context.Context, command *cobra.Command, options *options
 	if len(entries) == 0 {
 		return errors.New("no abilities could be read from the hero pages")
 	}
+	ioRecords, ioFailed, ioError := loadDeadlockIOHeroRecords(ctx, options)
+	ioEntries := make([]string, 0)
+	for _, record := range ioRecords {
+		for _, ability := range record.Page.Abilities {
+			ioEntries = append(ioEntries, record.Page.Title+" · "+ability.Name)
+		}
+	}
+	ioEntries = unique(ioEntries)
 	if options.json {
-		if err := writeJSON(command, map[string]any{"type": "abilities", "entries": entries, "failed_heroes": failed}); err != nil {
+		if err := writeJSON(command, map[string]any{"type": "abilities", "entries": entries, "failed_heroes": failed, "deadlock_io": map[string]any{"entries": ioEntries, "failed_heroes": ioFailed}}); err != nil {
 			return err
 		}
 	} else {
 		writeAbilityList(command.OutOrStdout(), entries)
+		writeCatalogComparison(command.OutOrStdout(), "Abilities", entries, ioEntries)
 		if len(failed) > 0 {
 			fmt.Fprintf(command.ErrOrStderr(), "warning: skipped %d hero pages while building the ability list\n", len(failed))
+		}
+		if ioError != nil {
+			fmt.Fprintln(command.ErrOrStderr(), "warning: Deadlock.io ability list unavailable:", ioError)
 		}
 	}
 	return nil
@@ -379,6 +508,14 @@ func normalizeName(value string) string {
 
 func clientFor(options *options) (*wiki.Client, error) {
 	return wiki.NewClient(options.wikiURL, options.cacheDir)
+}
+
+func deadlockIOClientFor(options *options) (*deadlockio.Client, error) {
+	return deadlockio.NewClient(options.deadlockIOURL, options.cacheDir)
+}
+
+func deadlockIOKind(command string) string {
+	return map[string]string{"hero": "hero", "item": "item", "mechanic": "mechanic"}[command]
 }
 
 func writeJSON(command *cobra.Command, value any) error {
@@ -593,6 +730,9 @@ func warning(command *cobra.Command, err error) error {
 }
 
 func sourceFor(page *wiki.Page, cached bool) map[string]any {
+	if page == nil {
+		return nil
+	}
 	return map[string]any{
 		"url":           page.URL,
 		"revision_id":   page.RevisionID,
