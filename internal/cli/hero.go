@@ -227,53 +227,43 @@ func showHeroWeapon(ctx context.Context, command *cobra.Command, options *option
 		return err
 	}
 	page, cached, lookupError := client.Get(ctx, title, options.refresh)
-	ioClient, err := deadlockIOClientFor(options)
-	if err != nil {
-		return err
-	}
-	ioPage, ioCached, ioError := ioClient.Get(ctx, title, "hero", options.refresh)
-	if page == nil && ioPage == nil {
-		return lookupError
+	fallback := false
+	if page == nil || len(weaponFactLines(page, boons)) == 0 {
+		ioClient, err := deadlockIOClientFor(options)
+		if err != nil {
+			return err
+		}
+		ioPage, ioCached, ioError := ioClient.Get(ctx, title, "hero", options.refresh)
+		if ioPage == nil {
+			if page == nil {
+				return lookupError
+			}
+			return fmt.Errorf("the wiki did not provide weapon stats for %s", page.Title)
+		}
+		page, cached, fallback = ioPage, ioCached, true
+		if ioError != nil {
+			warning(command, ioError)
+		}
 	}
 	lines := weaponFactLines(page, boons)
-	if page != nil && len(lines) == 0 && ioPage == nil {
+	if len(lines) == 0 {
 		return fmt.Errorf("the wiki did not provide weapon stats for %s", page.Title)
 	}
 	if options.json {
-		heroName := title
-		if page != nil {
-			heroName = page.Title
-		} else if ioPage != nil {
-			heroName = ioPage.Title
-		}
-		if err := writeJSON(command, map[string]any{"hero": heroName, "boons": boons, "weapon": weaponFactsAtBoons(page, boons), "source": sourceFor(page, cached), "deadlock_io": map[string]any{"weapon": weaponFactsAtBoons(ioPage, boons), "source": sourceFor(ioPage, ioCached)}}); err != nil {
+		if err := writeJSON(command, map[string]any{"hero": page.Title, "boons": boons, "weapon": weaponFactsAtBoons(page, boons), "source": sourceFor(page, cached), "fallback": fallback}); err != nil {
 			return err
 		}
-		if lookupError != nil && page != nil {
+		if lookupError != nil && !fallback {
 			warning(command, lookupError)
-		}
-		if ioError != nil && ioPage != nil {
-			warning(command, ioError)
 		}
 		return nil
 	}
-	if page != nil {
-		writeBox(command.OutOrStdout(), fmt.Sprintf("%s · Weapon · %d boons", page.Title, boons), lines)
-		fmt.Fprintln(command.OutOrStdout())
-		writeSource(command, page, cached)
-	}
-	if ioPage != nil {
-		fmt.Fprintln(command.OutOrStdout())
-		writeBox(command.OutOrStdout(), fmt.Sprintf("%s · Deadlock.io weapon · %d boons", ioPage.Title, boons), weaponFactLines(ioPage, boons))
-		fmt.Fprintln(command.OutOrStdout())
-		writeSource(command, ioPage, ioCached)
-	}
-	writeSourceComparison(command.OutOrStdout(), page, ioPage)
-	if lookupError != nil && page != nil {
+	writeFallbackNotice(command.OutOrStdout(), fallback)
+	writeBox(command.OutOrStdout(), fmt.Sprintf("%s · Weapon · %d boons", page.Title, boons), lines)
+	fmt.Fprintln(command.OutOrStdout())
+	writeSource(command, page, cached)
+	if lookupError != nil && !fallback {
 		warning(command, lookupError)
-	}
-	if ioError != nil && ioPage != nil {
-		warning(command, ioError)
 	}
 	return nil
 }
@@ -290,11 +280,9 @@ func rankHeroes(ctx context.Context, command *cobra.Command, options *options, m
 	if len(entries) == 0 {
 		return fmt.Errorf("no heroes exposed the %s stat", metric.Fact)
 	}
-	ioRecords, ioFailed, ioError := loadDeadlockIOHeroRecords(ctx, options)
-	ioEntries := rankHeroRecords(ioRecords, metric, boons)
-
+	fallback := recordsUseDeadlockIO(records)
 	if options.json {
-		return writeJSON(command, map[string]any{"metric": metric.Name, "fact": metric.Fact, "boons": boons, "entries": entries, "failed_heroes": failed, "deadlock_io": map[string]any{"entries": ioEntries, "failed_heroes": ioFailed}})
+		return writeJSON(command, map[string]any{"metric": metric.Name, "fact": metric.Fact, "boons": boons, "entries": entries, "failed_heroes": failed, "fallback": fallback})
 	}
 	lines := make([]string, 0, len(entries)+1)
 	for index, entry := range entries {
@@ -303,12 +291,9 @@ func rankHeroes(ctx context.Context, command *cobra.Command, options *options, m
 	if len(failed) > 0 {
 		lines = append(lines, fmt.Sprintf("Skipped %d hero pages that could not be read.", len(failed)))
 	}
+	writeFallbackNotice(command.OutOrStdout(), fallback)
 	writeBox(command.OutOrStdout(), "Heroes · "+metric.Name+fmt.Sprintf(" · %d boons", boons), lines)
 	writeAggregateProvenance(command.OutOrStdout(), records, "Ranked from canonical hero pages")
-	writeRankComparison(command.OutOrStdout(), metric, entries, ioEntries)
-	if ioError != nil {
-		fmt.Fprintln(command.ErrOrStderr(), "warning: Deadlock.io ranking unavailable:", ioError)
-	}
 	return nil
 }
 
@@ -346,35 +331,39 @@ func compareHeroes(ctx context.Context, command *cobra.Command, options *options
 		return err
 	}
 	records := make([]heroRecord, 0, len(titles))
+	fallback := false
 	for _, title := range unique(titles) {
 		page, cached, lookupError := client.Get(ctx, title, options.refresh)
 		if page == nil {
-			return lookupError
+			ioClient, clientErr := deadlockIOClientFor(options)
+			if clientErr != nil {
+				return clientErr
+			}
+			page, cached, clientErr = ioClient.Get(ctx, title, "hero", options.refresh)
+			if page == nil {
+				return lookupError
+			}
+			fallback = true
+			if clientErr != nil {
+				warning(command, clientErr)
+			}
 		}
-		if lookupError != nil {
+		if lookupError != nil && !fallback {
 			fmt.Fprintln(command.ErrOrStderr(), "warning:", lookupError)
 		}
 		records = append(records, heroRecord{Page: page, Cached: cached})
 	}
-	ioRecords, ioError := loadDeadlockIOHeroes(ctx, options, titles)
 	metrics := comparisonMetrics(weaponOnly)
 	if options.json {
-		return writeJSON(command, map[string]any{"boons": boons, "weapon_only": weaponOnly, "heroes": heroTitles(records), "metrics": comparisonRows(records, metrics, boons), "sources": recordSources(records), "deadlock_io": map[string]any{"heroes": heroTitles(ioRecords), "metrics": comparisonRows(ioRecords, metrics, boons), "sources": recordSources(ioRecords)}})
+		return writeJSON(command, map[string]any{"boons": boons, "weapon_only": weaponOnly, "heroes": heroTitles(records), "metrics": comparisonRows(records, metrics, boons), "sources": recordSources(records), "fallback": fallback})
 	}
 	title := fmt.Sprintf("Hero comparison · %d boons", boons)
 	if weaponOnly {
 		title = fmt.Sprintf("Weapon comparison · %d boons", boons)
 	}
+	writeFallbackNotice(command.OutOrStdout(), fallback)
 	writeBox(command.OutOrStdout(), title, comparisonLines(records, metrics, boons))
 	writeAggregateProvenance(command.OutOrStdout(), records, "Compared canonical hero pages")
-	if len(ioRecords) > 0 {
-		writeBox(command.OutOrStdout(), title+" · Deadlock.io", comparisonLines(ioRecords, metrics, boons))
-		writeAggregateProvenance(command.OutOrStdout(), ioRecords, "Compared Deadlock.io hero pages")
-		writeComparisonSourceSummary(command.OutOrStdout(), records, ioRecords)
-	}
-	if ioError != nil {
-		fmt.Fprintln(command.ErrOrStderr(), "warning: Deadlock.io comparison unavailable:", ioError)
-	}
 	return nil
 }
 
@@ -392,14 +381,13 @@ func findHeroes(ctx context.Context, command *cobra.Command, options *options, t
 			}
 		}
 	}
-	ioRecords, ioFailed, ioError := loadDeadlockIOHeroRecords(ctx, options)
-	ioMatched := matchHeroTag(ioRecords, tag)
+	fallback := recordsUseDeadlockIO(records)
 	if options.json {
 		entries := make([]map[string]any, 0, len(matched))
 		for _, record := range matched {
 			entries = append(entries, map[string]any{"hero": record.Page.Title, "tags": record.Page.Tags, "source": sourceFor(record.Page, record.Cached)})
 		}
-		return writeJSON(command, map[string]any{"tag": tag, "entries": entries, "failed_heroes": failed, "deadlock_io": map[string]any{"entries": tagEntries(ioMatched), "failed_heroes": ioFailed}})
+		return writeJSON(command, map[string]any{"tag": tag, "entries": entries, "failed_heroes": failed, "fallback": fallback})
 	}
 	lines := make([]string, 0, len(matched)+1)
 	for _, record := range matched {
@@ -411,29 +399,10 @@ func findHeroes(ctx context.Context, command *cobra.Command, options *options, t
 	if len(failed) > 0 {
 		lines = append(lines, fmt.Sprintf("Skipped %d hero pages that could not be read.", len(failed)))
 	}
+	writeFallbackNotice(command.OutOrStdout(), fallback)
 	writeBox(command.OutOrStdout(), "Heroes tagged "+tag, lines)
 	writeAggregateProvenance(command.OutOrStdout(), matched, "Matched from canonical hero pages")
-	writeTagSourceComparison(command.OutOrStdout(), tag, matched, ioMatched)
-	if ioError != nil {
-		fmt.Fprintln(command.ErrOrStderr(), "warning: Deadlock.io tag search unavailable:", ioError)
-	}
 	return nil
-}
-
-func loadDeadlockIOHeroes(ctx context.Context, options *options, titles []string) ([]heroRecord, error) {
-	client, err := deadlockIOClientFor(options)
-	if err != nil {
-		return nil, err
-	}
-	records := make([]heroRecord, 0, len(titles))
-	for _, title := range unique(titles) {
-		page, cached, fetchError := client.Get(ctx, title, "hero", options.refresh)
-		if page == nil {
-			return records, fetchError
-		}
-		records = append(records, heroRecord{Page: page, Cached: cached})
-	}
-	return records, nil
 }
 
 func comparisonRows(records []heroRecord, metrics []heroMetric, boons int) map[string]map[string]string {
@@ -468,25 +437,13 @@ func recordSources(records []heroRecord) []map[string]any {
 	return sources
 }
 
-func matchHeroTag(records []heroRecord, tag string) []heroRecord {
-	matched := make([]heroRecord, 0)
+func recordsUseDeadlockIO(records []heroRecord) bool {
 	for _, record := range records {
-		for _, candidate := range record.Page.Tags {
-			if normalizeName(candidate) == normalizeName(tag) {
-				matched = append(matched, record)
-				break
-			}
+		if pageSourceName(record.Page) == "Deadlock.io" {
+			return true
 		}
 	}
-	return matched
-}
-
-func tagEntries(records []heroRecord) []map[string]any {
-	entries := make([]map[string]any, 0, len(records))
-	for _, record := range records {
-		entries = append(entries, map[string]any{"hero": record.Page.Title, "tags": record.Page.Tags, "source": sourceFor(record.Page, record.Cached)})
-	}
-	return entries
+	return false
 }
 
 func loadHeroRecords(ctx context.Context, options *options) ([]heroRecord, []string, error) {
@@ -495,11 +452,15 @@ func loadHeroRecords(ctx context.Context, options *options) ([]heroRecord, []str
 		return nil, nil, err
 	}
 	catalog, _, lookupError := client.Get(ctx, "Heroes", options.refresh)
-	if catalog == nil {
-		return nil, nil, lookupError
-	}
-	if len(catalog.Catalog) == 0 {
-		return nil, nil, fmt.Errorf("the wiki did not provide a hero catalog")
+	if catalog == nil || len(catalog.Catalog) == 0 {
+		records, failed, fallbackError := loadDeadlockIOHeroRecords(ctx, options)
+		if fallbackError != nil {
+			if lookupError != nil {
+				return nil, nil, lookupError
+			}
+			return nil, nil, fallbackError
+		}
+		return records, failed, nil
 	}
 	records := make([]heroRecord, 0, len(catalog.Catalog))
 	failed := make([]string, 0)

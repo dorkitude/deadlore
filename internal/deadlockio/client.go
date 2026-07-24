@@ -164,7 +164,7 @@ func (c *Client) fetchJSON(ctx context.Context, endpoint string, target any) err
 	if err != nil {
 		return err
 	}
-	request.Header.Set("User-Agent", "deadlore/0.5 (+https://github.com/dorkitude/deadlore; source comparison)")
+	request.Header.Set("User-Agent", "deadlore (+https://github.com/dorkitude/deadlore; fallback lookup)")
 	request.Header.Set("Accept", "application/json")
 	response, err := c.httpClient.Do(request)
 	if err != nil {
