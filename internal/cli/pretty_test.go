@@ -49,3 +49,19 @@ func TestPaintUsesColorOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("enabled color = %q", got)
 	}
 }
+
+func TestWriteAbilityListGroupsAbilitiesByHero(t *testing.T) {
+	var output bytes.Buffer
+	writeAbilityList(&output, []string{
+		"Vindicta · Stake", "Vindicta · Flight", "Vindicta · Crow Familiar",
+		"Haze · Sleep Dagger", "Haze · Smoke Bomb",
+	})
+
+	result := output.String()
+	if !strings.Contains(result, "• Vindicta — Stake · Flight · Crow Familiar") {
+		t.Fatalf("expected grouped Vindicta abilities, got:\n%s", result)
+	}
+	if !strings.Contains(result, "• Haze — Sleep Dagger · Smoke Bomb") {
+		t.Fatalf("expected grouped Haze abilities, got:\n%s", result)
+	}
+}

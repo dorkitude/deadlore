@@ -308,12 +308,43 @@ func listAbilities(ctx context.Context, command *cobra.Command, options *options
 			return err
 		}
 	} else {
-		writeList(command.OutOrStdout(), "Abilities", entries)
+		writeAbilityList(command.OutOrStdout(), entries)
 		if len(failed) > 0 {
 			fmt.Fprintf(command.ErrOrStderr(), "warning: skipped %d hero pages while building the ability list\n", len(failed))
 		}
 	}
 	return nil
+}
+
+func writeAbilityList(output io.Writer, entries []string) {
+	type heroAbilities struct {
+		hero      string
+		abilities []string
+	}
+
+	groups := make([]heroAbilities, 0)
+	for _, entry := range entries {
+		hero, ability, found := strings.Cut(entry, " · ")
+		if !found {
+			groups = append(groups, heroAbilities{hero: entry})
+			continue
+		}
+		if len(groups) > 0 && groups[len(groups)-1].hero == hero {
+			groups[len(groups)-1].abilities = append(groups[len(groups)-1].abilities, ability)
+			continue
+		}
+		groups = append(groups, heroAbilities{hero: hero, abilities: []string{ability}})
+	}
+
+	lines := make([]string, 0, len(groups))
+	for _, group := range groups {
+		if len(group.abilities) == 0 {
+			lines = append(lines, "• "+group.hero)
+			continue
+		}
+		lines = append(lines, "• "+group.hero+" — "+strings.Join(group.abilities, " · "))
+	}
+	writeBox(output, fmt.Sprintf("Abilities · %d", len(entries)), lines)
 }
 
 func unique(values []string) []string {
