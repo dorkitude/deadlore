@@ -215,7 +215,17 @@ func lookupAbility(ctx context.Context, command *cobra.Command, options *options
 
 	ability, found := findAbility(page.Abilities, name)
 	if !found {
-		return fmt.Errorf("%q resolved to %s, but no matching ability was found", name, page.Title)
+		notice := fmt.Sprintf("%q is not a hero ability; showing the resolved %s page instead.", name, page.Title)
+		if options.json {
+			if err := writeJSON(command, map[string]any{"notice": notice, "page": page, "cached": cached}); err != nil {
+				return err
+			}
+		} else {
+			fmt.Fprintln(command.OutOrStdout(), "Note:", notice)
+			fmt.Fprintln(command.OutOrStdout())
+			writePage(command, page, cached)
+		}
+		return warning(command, lookupError)
 	}
 	if options.json {
 		if err := writeJSON(command, map[string]any{"ability": ability, "page": page, "cached": cached}); err != nil {
