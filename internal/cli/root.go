@@ -56,7 +56,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().StringVar(&options.cacheDir, "cache-dir", "", "cache directory (default: system user cache)")
 	root.PersistentFlags().StringVar(&options.wikiURL, "wiki-url", wiki.DefaultBaseURL, "Deadlock Wiki base URL")
 
-	root.AddCommand(newLookupCommand("hero", "Look up a hero", options))
+	root.AddCommand(newHeroCommand(options))
 	root.AddCommand(newLookupCommand("item", "Look up an item", options))
 	root.AddCommand(newLookupCommand("mechanic", "Look up a mechanic", options))
 	root.AddCommand(newAbilityCommand(options))

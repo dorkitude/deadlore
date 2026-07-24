@@ -63,7 +63,7 @@ func (c *Client) Get(ctx context.Context, title string, refresh bool) (*Page, bo
 		}
 		return nil, false, err
 	}
-	if err := c.cache.Save(page); err != nil {
+	if err := c.cache.Save(title, page); err != nil {
 		return nil, false, fmt.Errorf("write cache: %w", err)
 	}
 	return page, false, nil

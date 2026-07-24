@@ -52,6 +52,12 @@ go run ./cmd/deadlore Haze
 ```bash
 deadlore Haze
 deadlore hero Haze
+deadlore hero weapon Haze
+deadlore hero weapon rank fire-rate
+deadlore hero weapon compare Haze Wraith --boons 10
+deadlore hero rank health
+deadlore hero compare Haze Wraith
+deadlore hero find --tag Assassin
 deadlore ability "Sleep Dagger"
 deadlore item "Heroic Aura"
 deadlore hero list
@@ -77,6 +83,10 @@ Each response reports the canonical URL, wiki revision when available, wiki last
 ## Timers
 
 `deadlore timers cheatsheet` (or simply `deadlore cheat`) is a built-in, offline reference for the map's spawn and respawn timers. It covers jungle camps, Sinner's Sacrifice, breakables, power-ups, Mid-Boss, the Soul Urn, and the Unstable Rift. Use `camps`, `pickups`, or `objectives` to narrow the output. The reference identifies approximate or variable timers with `~` and reports the patch date through which it was checked; it never fetches the wiki.
+
+## Hero analysis
+
+Hero lookups also support comparisons and rankings from canonical hero pages. `deadlore hero weapon` shows one hero's weapon stats; `hero weapon rank` accepts `dps`, `fire-rate`, `bullet-damage`, `ammo`, `reload-time`, and `bullet-velocity`. `hero rank` accepts `health`, `health-regen`, `move-speed`, and `sprint-speed`. Add `--boons N` to a weapon view, rank, or comparison to evaluate stats at a particular boon count. `hero find --tag Assassin` filters the roster by a wiki hero tag. These aggregate commands use the local cache after their first lookup; `--json` includes provenance for every hero entry.
 
 Interactive terminals get a compact, in-game-inspired stat HUD with ANSI color on modern Windows, macOS, and Linux. Color turns off automatically for redirected output, `NO_COLOR`, `TERM=dumb`, `--no-color`, and `--json`.
 

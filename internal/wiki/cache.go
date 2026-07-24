@@ -13,8 +13,9 @@ import (
 
 const cacheDirectoryName = "deadlore"
 
-// CurrentCacheVersion invalidates serialized pages when the parser gains new fields.
-const CurrentCacheVersion = 3
+// CurrentCacheVersion invalidates serialized pages when their cache identity or
+// parsed representation changes.
+const CurrentCacheVersion = 4
 
 type Cache struct {
 	directory string
@@ -52,7 +53,11 @@ func (c *Cache) Load(title string) (*Page, error) {
 	return &page, nil
 }
 
-func (c *Cache) Save(page *Page) error {
+func (c *Cache) Save(title string, page *Page) error {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return errors.New("a cache title is required")
+	}
 	contents, err := json.Marshal(page)
 	if err != nil {
 		return err
@@ -76,7 +81,7 @@ func (c *Cache) Save(page *Page) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryName, c.path(page.Title))
+	return os.Rename(temporaryName, c.path(title))
 }
 
 func (c *Cache) Clear(title string) error {
