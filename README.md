@@ -5,6 +5,22 @@ It performs one-page, canonical article lookups and keeps a small local cache; i
 
 ## Install
 
+### Homebrew (macOS and Linux)
+
+```bash
+brew tap dorkitude/tap
+brew install deadlore
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add dorkitude https://github.com/dorkitude/scoop-bucket
+scoop install dorkitude/deadlore
+```
+
+### Go
+
 ```bash
 go install ./cmd/deadlore
 ```
