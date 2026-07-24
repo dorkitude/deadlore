@@ -19,6 +19,16 @@ scoop bucket add dorkitude https://github.com/dorkitude/scoop-bucket
 scoop install dorkitude/deadlore
 ```
 
+### Direct Windows install
+
+Run this from PowerShell or `cmd.exe`—no package manager required:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/dorkitude/deadlore/main/scripts/install.ps1 | iex"
+```
+
+It installs the matching x64/ARM64 release to `%LocalAppData%\Programs\deadlore`, verifies its SHA-256 hash, and adds that directory to your user `PATH`.
+
 ### Go
 
 ```bash
