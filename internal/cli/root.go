@@ -394,7 +394,7 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 		writeBox(output, effect.Kind, lines)
 	}
 	for _, section := range page.Sections {
-		if len(page.Abilities) > 0 && strings.EqualFold(section.Title, "Abilities") {
+		if strings.EqualFold(section.Title, "Update history") || (len(page.Abilities) > 0 && strings.EqualFold(section.Title, "Abilities")) {
 			continue
 		}
 		if len(section.Text) == 0 {
