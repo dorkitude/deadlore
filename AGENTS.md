@@ -4,6 +4,13 @@
 
 - Build the root-level executable with `go build -o deadlore ./cmd/deadlore`.
 - Run `go test ./...` and `go vet ./...` before committing.
+- After every shipped CLI change, rebuild the root executable and reinstall the published Homebrew formula for this machine:
+  ```bash
+  go build -o deadlore ./cmd/deadlore
+  brew tap dorkitude/tap https://github.com/dorkitude/homebrew-tap
+  brew list --formula deadlore >/dev/null 2>&1 && brew reinstall deadlore || brew install dorkitude/tap/deadlore
+  ```
+  Leave the formula installed; this makes `deadlore` available on the user's `PATH`.
 - Use a temporary cache for live smoke tests so development lookups do not affect the user cache:
   ```bash
   ./deadlore --cache-dir /tmp/deadlore-smoke Haze
