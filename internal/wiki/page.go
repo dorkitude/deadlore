@@ -3,6 +3,7 @@ package wiki
 import "time"
 
 type Page struct {
+	CacheVersion int       `json:"cache_version"`
 	Title        string    `json:"title"`
 	URL          string    `json:"url"`
 	RevisionID   string    `json:"revision_id,omitempty"`

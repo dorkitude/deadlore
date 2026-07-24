@@ -25,9 +25,10 @@ func ParsePage(source io.Reader, pageURL string, fetchedAt time.Time) (*Page, er
 	}
 
 	page := &Page{
-		Title:     strings.TrimSpace(strings.TrimSuffix(cleanText(text(titleNode)), "Give feedback")),
-		URL:       pageURL,
-		FetchedAt: fetchedAt,
+		CacheVersion: CurrentCacheVersion,
+		Title:        strings.TrimSpace(strings.TrimSuffix(cleanText(text(titleNode)), "Give feedback")),
+		URL:          pageURL,
+		FetchedAt:    fetchedAt,
 	}
 	page.Summary = firstParagraph(contentNode)
 	page.Facts = append(infoboxFacts(contentNode), itemStats(contentNode)...)

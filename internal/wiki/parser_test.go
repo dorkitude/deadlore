@@ -28,6 +28,9 @@ func TestParsePage(t *testing.T) {
 	if page.Title != "Heroic Aura" {
 		t.Fatalf("title = %q", page.Title)
 	}
+	if page.CacheVersion != CurrentCacheVersion {
+		t.Fatalf("cache version = %d", page.CacheVersion)
+	}
 	if page.RevisionID != "95734" {
 		t.Fatalf("revision = %q", page.RevisionID)
 	}

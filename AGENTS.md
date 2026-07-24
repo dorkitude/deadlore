@@ -23,6 +23,8 @@
 
 The root `deadlore` binary is ignored by Git. `--json` is a public machine-facing interface; keep it structured and free of terminal formatting.
 
+When changing parsed `wiki.Page` output, bump `wiki.CurrentCacheVersion` so older cached pages cannot hide newly supported fields from users.
+
 ## Wiki access
 
 Deadlore is intentionally a low-volume client of `deadlock.wiki`:

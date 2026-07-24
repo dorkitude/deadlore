@@ -13,6 +13,9 @@ import (
 
 const cacheDirectoryName = "deadlore"
 
+// CurrentCacheVersion invalidates serialized pages when the parser gains new fields.
+const CurrentCacheVersion = 2
+
 type Cache struct {
 	directory string
 }

@@ -52,7 +52,7 @@ func (c *Client) Get(ctx context.Context, title string, refresh bool) (*Page, bo
 	if err != nil {
 		return nil, false, fmt.Errorf("read cache: %w", err)
 	}
-	if cached != nil && !refresh && time.Since(cached.FetchedAt) < c.ttl {
+	if cached != nil && cached.CacheVersion == CurrentCacheVersion && !refresh && time.Since(cached.FetchedAt) < c.ttl {
 		return cached, true, nil
 	}
 
