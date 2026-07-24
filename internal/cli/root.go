@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/dorkitude/deadlore/internal/wiki"
@@ -195,27 +194,29 @@ func writeJSON(command *cobra.Command, value any) error {
 
 func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 	output := command.OutOrStdout()
-	fmt.Fprintln(output, page.Title)
+	var overview []string
 	if page.Summary != "" {
-		fmt.Fprintln(output)
-		fmt.Fprintln(output, page.Summary)
+		overview = append(overview, page.Summary)
+	}
+	if len(overview) > 0 {
+		writeBox(output, page.Title+" · Deadlock Wiki", overview)
 	}
 	if len(page.Facts) > 0 {
 		fmt.Fprintln(output)
-		writer := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
+		facts := make([]string, 0, len(page.Facts))
 		for _, fact := range page.Facts {
-			fmt.Fprintf(writer, "%s\t%s\n", strings.TrimSuffix(fact.Label, ":")+":", fact.Value)
+			label := strings.TrimSpace(fact.Label)
+			label = strings.TrimSpace(strings.TrimSuffix(label, ":"))
+			facts = append(facts, "• "+label+": "+fact.Value)
 		}
-		writer.Flush()
+		writeBox(output, "Stats", facts)
 	}
 	for _, section := range page.Sections {
 		if len(section.Text) == 0 {
 			continue
 		}
-		fmt.Fprintf(output, "\n%s\n", section.Title)
-		for _, paragraph := range section.Text {
-			fmt.Fprintln(output, paragraph)
-		}
+		fmt.Fprintln(output)
+		writeBox(output, section.Title, section.Text)
 	}
 	fmt.Fprintln(output)
 	writeSource(command, page, cached)
@@ -223,18 +224,19 @@ func writePage(command *cobra.Command, page *wiki.Page, cached bool) {
 
 func writeSource(command *cobra.Command, page *wiki.Page, cached bool) {
 	output := command.OutOrStdout()
-	fmt.Fprintf(output, "Source: %s\n", page.URL)
+	lines := []string{"Source: " + page.URL}
 	if page.RevisionID != "" {
-		fmt.Fprintf(output, "Revision: %s\n", page.RevisionID)
+		lines = append(lines, "Revision: "+page.RevisionID)
 	}
 	if page.LastModified != "" {
-		fmt.Fprintf(output, "%s\n", page.LastModified)
+		lines = append(lines, page.LastModified)
 	}
-	fmt.Fprintf(output, "Fetched: %s", page.FetchedAt.Format(time.RFC3339))
+	fetched := "Fetched: " + page.FetchedAt.Format(time.RFC3339)
 	if cached {
-		fmt.Fprint(output, " (cached)")
+		fetched += " (cached)"
 	}
-	fmt.Fprintln(output)
+	lines = append(lines, fetched)
+	writeBox(output, "Provenance", lines)
 }
 
 func warning(command *cobra.Command, err error) error {
