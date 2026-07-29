@@ -11,16 +11,6 @@
   brew list --formula deadlore >/dev/null 2>&1 && brew reinstall deadlore || brew install dorkitude/tap/deadlore
   ```
   Leave the formula installed; this makes `deadlore` available on the user's `PATH`.
-- Use a temporary cache for live smoke tests so development lookups do not affect the user cache:
-  ```bash
-  ./deadlore --cache-dir /tmp/deadlore-smoke Haze
-  ./deadlore --cache-dir /tmp/deadlore-smoke Leech
-  ./deadlore --cache-dir /tmp/deadlore-smoke hero list
-  ./deadlore --cache-dir /tmp/deadlore-smoke item list
-  ./deadlore --cache-dir /tmp/deadlore-smoke ability "Sleep Dagger"
-  ./deadlore --cache-dir /tmp/deadlore-smoke --json ability list
-  ```
-
 The root `deadlore` binary is ignored by Git. `--json` is a public machine-facing interface; keep it structured and free of terminal formatting. Human output may use ANSI color in interactive terminals, but must remain readable without it: honor `NO_COLOR`, `TERM=dumb`, `--no-color`, redirected output, and `--json`.
 
 When changing parsed `wiki.Page` output, bump `wiki.CurrentCacheVersion` so older cached pages cannot hide newly supported fields from users.
