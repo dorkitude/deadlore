@@ -57,6 +57,9 @@ deadlore hero weapon compare Haze Wraith --boons 10
 deadlore hero rank health
 deadlore hero compare Haze Wraith
 deadlore hero find --tag Assassin
+deadlore build Haze
+deadlore build Haze --sort all-time --limit 10
+deadlore build Haze --language English
 deadlore ability "Sleep Dagger"
 deadlore item "Heroic Aura"
 deadlore hero list
@@ -81,7 +84,7 @@ Each response reports the canonical URL, wiki revision when available, wiki last
 
 ## Sources
 
-The Wiki is used whenever it has the requested page, catalog, ability, or weapon data. Only a Wiki miss triggers the Deadlock.io fallback, which is clearly labeled in human output and reports `"fallback": true` in `--json`; ordinary Wiki responses do not query it. The two sources retain separate caches: `cache status` reports both, and `cache clear` clears a matching entry from both. Use `--wiki-url` or `--deadlockio-url` only when testing an alternate source endpoint.
+The Wiki is used whenever it has the requested page, catalog, ability, or weapon data. Only a Wiki miss triggers the Deadlock.io fallback, which is clearly labeled in human output and reports `"fallback": true` in `--json`; ordinary Wiki responses do not query it. Wiki, Deadlock.io, and public-build data retain separate caches: `cache status` reports all three, and `cache clear` clears a matching Wiki/Deadlock.io entry while `cache clear --all` clears every cache. Use `--wiki-url`, `--deadlockio-url`, or `--deadlock-api-url` only when testing an alternate source endpoint.
 
 ## Timers
 
@@ -92,6 +95,10 @@ The Wiki is used whenever it has the requested page, catalog, ability, or weapon
 Hero lookups also support comparisons and rankings from canonical hero pages. `deadlore hero weapon` shows one hero's weapon stats; `hero weapon rank` accepts `dps`, `fire-rate`, `bullet-damage`, `ammo`, `reload-time`, and `bullet-velocity`. `hero rank` accepts `health`, `health-regen`, `move-speed`, and `sprint-speed`. Add `--boons N` to a weapon view, rank, or comparison to evaluate stats at a particular boon count. `hero find --tag Assassin` filters the roster by a wiki hero tag. These aggregate commands use the local cache after their first lookup; `--json` includes provenance for every hero entry.
 
 Interactive terminals get a compact, in-game-inspired stat HUD with ANSI color on modern Windows, macOS, and Linux. Color turns off automatically for redirected output, `NO_COLOR`, `TERM=dumb`, `--no-color`, and `--json`.
+
+## Public builds
+
+`deadlore build <hero>` lists the most-popular public in-game builds from [Deadlock API](https://api.deadlock-api.com/docs), defaulting to weekly favorites. Use `--sort all-time` or `--sort recent`, `--limit N`, and optionally `--language English`. The CLI deliberately displays only compact metadata—title, favorites, update date, and build ID—and links every result to its full build viewer on Deadlock Labs. It does not copy item paths, descriptions, or annotations. Build data has its own local cache, which appears in `cache status` and is cleared by `cache clear --all`.
 
 ## Notes on sourcing
 

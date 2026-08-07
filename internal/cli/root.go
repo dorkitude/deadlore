@@ -10,18 +10,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dorkitude/deadlore/internal/deadlockapi"
 	"github.com/dorkitude/deadlore/internal/deadlockio"
 	"github.com/dorkitude/deadlore/internal/wiki"
 	"github.com/spf13/cobra"
 )
 
 type options struct {
-	json          bool
-	noColor       bool
-	refresh       bool
-	cacheDir      string
-	wikiURL       string
-	deadlockIOURL string
+	json           bool
+	noColor        bool
+	refresh        bool
+	cacheDir       string
+	wikiURL        string
+	deadlockIOURL  string
+	deadlockAPIURL string
 }
 
 func Execute() {
@@ -58,6 +60,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().StringVar(&options.cacheDir, "cache-dir", "", "cache directory (default: system user cache)")
 	root.PersistentFlags().StringVar(&options.wikiURL, "wiki-url", wiki.DefaultBaseURL, "Deadlock Wiki base URL")
 	root.PersistentFlags().StringVar(&options.deadlockIOURL, "deadlockio-url", deadlockio.DefaultBaseURL, "Deadlock.io API base URL")
+	root.PersistentFlags().StringVar(&options.deadlockAPIURL, "deadlock-api-url", deadlockapi.DefaultBaseURL, "Deadlock API base URL")
 
 	root.AddCommand(newHeroCommand(options))
 	root.AddCommand(newLookupCommand("item", "Look up an item", options))
@@ -67,6 +70,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newCacheCommand(options))
 	root.AddCommand(newTimersCommand(options))
 	root.AddCommand(newCheatCommand(options))
+	root.AddCommand(newBuildCommand(options))
 	return root
 }
 
@@ -172,8 +176,16 @@ func newCacheCommand(options *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			apiClient, err := deadlockAPIClientFor(options)
+			if err != nil {
+				return err
+			}
+			apiCount, apiNewest, err := apiClient.CacheStatus()
+			if err != nil {
+				return err
+			}
 			if options.json {
-				return writeJSON(command, map[string]any{"entries": count, "newest": newest, "deadlock_io": map[string]any{"entries": ioCount, "newest": ioNewest}})
+				return writeJSON(command, map[string]any{"entries": count, "newest": newest, "deadlock_io": map[string]any{"entries": ioCount, "newest": ioNewest}, "deadlock_api": map[string]any{"entries": apiCount, "newest": apiNewest}})
 			}
 			fmt.Fprintf(command.OutOrStdout(), "Deadlock Wiki entries: %d\n", count)
 			if !newest.IsZero() {
@@ -182,6 +194,10 @@ func newCacheCommand(options *options) *cobra.Command {
 			fmt.Fprintf(command.OutOrStdout(), "Deadlock.io entries: %d\n", ioCount)
 			if !ioNewest.IsZero() {
 				fmt.Fprintf(command.OutOrStdout(), "Deadlock.io newest:  %s\n", ioNewest.Format(time.RFC3339))
+			}
+			fmt.Fprintf(command.OutOrStdout(), "Deadlock API entries: %d\n", apiCount)
+			if !apiNewest.IsZero() {
+				fmt.Fprintf(command.OutOrStdout(), "Deadlock API newest:  %s\n", apiNewest.Format(time.RFC3339))
 			}
 			return nil
 		},
@@ -217,6 +233,15 @@ func newCacheCommand(options *options) *cobra.Command {
 			}
 			if err := ioClient.ClearCache(title); err != nil {
 				return err
+			}
+			if all {
+				apiClient, err := deadlockAPIClientFor(options)
+				if err != nil {
+					return err
+				}
+				if err := apiClient.ClearCache(); err != nil {
+					return err
+				}
 			}
 			if all {
 				fmt.Fprintln(command.OutOrStdout(), "Cleared all cached pages.")
@@ -513,6 +538,10 @@ func clientFor(options *options) (*wiki.Client, error) {
 
 func deadlockIOClientFor(options *options) (*deadlockio.Client, error) {
 	return deadlockio.NewClient(options.deadlockIOURL, options.cacheDir)
+}
+
+func deadlockAPIClientFor(options *options) (*deadlockapi.Client, error) {
+	return deadlockapi.NewClient(options.deadlockAPIURL, options.cacheDir)
 }
 
 func deadlockIOKind(command string) string {
