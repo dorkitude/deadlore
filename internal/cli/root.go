@@ -43,6 +43,7 @@ func newRootCommand() *cobra.Command {
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       currentVersion(),
 		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			configureColor(options.noColor || options.json)
 		},

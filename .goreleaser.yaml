@@ -1,0 +1,63 @@
+version: 2
+
+project_name: deadlore
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: deadlore
+    binary: deadlore
+    main: ./cmd/deadlore
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/dorkitude/deadlore/internal/cli.version={{.Version}}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+
+# One macOS binary for Apple Silicon and Intel (deadlore_X_darwin_all.tar.gz),
+# which the Homebrew cask installs. The per-arch darwin archives stay too.
+universal_binaries:
+  - id: deadlore
+    ids: [deadlore]
+    replace: false
+
+# Placeholder for signing and notarizing the macOS binaries (the per-arch
+# builds and the universal binary, which share the id "deadlore"). Off until
+# the MACOS_SIGN_* / MACOS_NOTARY_* secrets exist on dorkitude/deadlore; the
+# cask's quarantine removal covers unsigned binaries until then.
+# https://goreleaser.com/customization/sign/notarize/
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [deadlore]
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+
+archives:
+  - id: default
+    ids: [deadlore]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [LICENSE, README.md]
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  name_template: "Deadlore {{ .Tag }}"
+
+changelog:
+  disable: true

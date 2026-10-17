@@ -7,9 +7,22 @@
 ### Homebrew (macOS and Linux)
 
 ```bash
-brew tap dorkitude/tap
-brew install deadlore
+brew install dorkitude/tap/deadlore
 ```
+
+This installs a prebuilt binary as a cask (a universal binary on macOS), so it needs neither Go nor the Xcode Command Line Tools.
+
+If you installed deadlore 0.7.0 or earlier with Homebrew, that was a formula built from source. Switch to the cask once:
+
+```bash
+brew uninstall deadlore && brew install dorkitude/tap/deadlore
+```
+
+After that, `brew upgrade` keeps it current.
+
+### Prebuilt binaries
+
+Each [GitHub release](https://github.com/dorkitude/deadlore/releases) has archives for macOS (Apple Silicon, Intel, and universal), Linux, and Windows on amd64 and arm64, plus `checksums.txt`. Check the installed version with `deadlore --version`.
 
 ### Scoop (Windows)
 
